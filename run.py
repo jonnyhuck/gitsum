@@ -1,3 +1,4 @@
+import re
 import sys
 import tempfile
 from io import BytesIO
@@ -77,7 +78,7 @@ def analyze(repo, detail):
     if detail:
         print(f"{'Commit':<8} {'Files':<8} {'Insertions':<12} {'Deletions':<10}")
 
-    # loop throughn commits
+    # loop through commits
     total_commits = total_edits = 0
     for commit in commits:
         
@@ -97,6 +98,22 @@ def analyze(repo, detail):
         
         # loop through the files and count insertions and deletions
         insertions = deletions = 0
+
+        # Prepare diff text by file if we have a parent commit
+        diffs_by_path = {}
+        if parent_tree:
+            buf = BytesIO()
+            porcelain.diff_tree(repo, parent_tree, commit.tree, outstream=buf)
+            diff_text = buf.getvalue().decode("utf-8", errors="ignore")
+
+            # Split the diff text into per-file chunks using the 'diff --git' header lines
+            file_paths = re.findall(r'^diff --git a/(.*) b/.*$', diff_text, flags=re.MULTILINE)
+            file_diffs = re.split(r'^diff --git a/.* b/.*$', diff_text, flags=re.MULTILINE)
+
+            # file_diffs[0] is everything before the first file diff, discard it
+            # Map file path to its corresponding diff chunk
+            diffs_by_path = dict(zip(file_paths, file_diffs[1:]))
+
         for change in changes:
 
             # unpack changes tuple
@@ -104,19 +121,16 @@ def analyze(repo, detail):
             # old_mode, new_mode = changes[1]
             old_sha, new_sha = change[2]
 
-            # if there is a diff to be calculated, get it
-            if old_path and new_path:
-                buf = BytesIO()
-                porcelain.diff_tree(repo, parent_tree, commit.tree, outstream=buf)
-                diff = buf.getvalue()
-                if diff:
+            path = new_path or old_path
 
-                    # count the additions and deletions
-                    for line in diff.decode("utf-8", errors="ignore").splitlines():
-                        if line.startswith("+") and not line.startswith("+++"):
-                            insertions += 1
-                        elif line.startswith("-") and not line.startswith("---"):
-                            deletions += 1
+            # if there is a diff to be calculated, get it per file chunk
+            if old_path and new_path and path in diffs_by_path:
+                diff_lines = diffs_by_path[path].splitlines()
+                for line in diff_lines:
+                    if line.startswith("+") and not line.startswith("+++"):
+                        insertions += 1
+                    elif line.startswith("-") and not line.startswith("---"):
+                        deletions += 1
             
             # if it's a new file, everything is an insertion
             elif new_path:
@@ -126,13 +140,13 @@ def analyze(repo, detail):
                 except KeyError:
                     pass
             
-            # if the file is removed, everythign is a deletion
+            # if the file is removed, everything is a deletion
             elif old_path:
                 try:
                     blob = repo[old_sha]
+                    deletions += blob.data.count(b"\n")
                 except KeyError:
                     pass
-                deletions += blob.data.count(b"\n")
 
         # output the counts
         if detail:
