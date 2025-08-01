@@ -5,7 +5,7 @@ from io import BytesIO
 from dulwich.repo import Repo
 from dulwich import porcelain
 from urllib.parse import urlparse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 def clone_or_open(source):
     """ Load a local or remote repo into a Repo object"""
@@ -71,14 +71,13 @@ def analyze(repo, detail):
     walker = repo.get_walker(include=[commit_id])
 
     # collect commits and sort oldest to newest
-    # TODO: why?
     commits = [entry.commit for entry in walker]
     commits.reverse()
 
     # Track commit date range
     if commits:
-        first_commit_date = datetime.utcfromtimestamp(commits[0].author_time)
-        last_commit_date = datetime.utcfromtimestamp(commits[-1].author_time)
+        first_commit_date = datetime.fromtimestamp(commits[0].author_time, tz=timezone.utc)
+        last_commit_date = datetime.fromtimestamp(commits[-1].author_time, tz=timezone.utc)
         timespan = last_commit_date - first_commit_date
     else:
         first_commit_date = last_commit_date = None
