@@ -5,6 +5,7 @@ from io import BytesIO
 from dulwich.repo import Repo
 from dulwich import porcelain
 from urllib.parse import urlparse
+from datetime import datetime, timedelta
 
 def clone_or_open(source):
     """ Load a local or remote repo into a Repo object"""
@@ -74,6 +75,15 @@ def analyze(repo, detail):
     commits = [entry.commit for entry in walker]
     commits.reverse()
 
+    # Track commit date range
+    if commits:
+        first_commit_date = datetime.utcfromtimestamp(commits[0].author_time)
+        last_commit_date = datetime.utcfromtimestamp(commits[-1].author_time)
+        timespan = last_commit_date - first_commit_date
+    else:
+        first_commit_date = last_commit_date = None
+        timespan = timedelta(0)
+
     # init the output
     if detail:
         print(f"{'Commit':<8} {'Files':<8} {'Insertions':<12} {'Deletions':<10}")
@@ -121,9 +131,8 @@ def analyze(repo, detail):
             # old_mode, new_mode = changes[1]
             old_sha, new_sha = change[2]
 
-            path = new_path or old_path
-
             # if there is a diff to be calculated, get it per file chunk
+            path = new_path or old_path
             if old_path and new_path and path in diffs_by_path:
                 diff_lines = diffs_by_path[path].splitlines()
                 for line in diff_lines:
@@ -152,14 +161,15 @@ def analyze(repo, detail):
         if detail:
             print(f"{commit.id.decode()[:8]} {files_changed:<8} {insertions:<12} {deletions:<10}")
         
-        # sum total edits
-        total_edits += insertions + deletions
+        # sum total edits (don't do deletions too as it artificially inflates results)
+        total_edits += insertions
 
     # output a summary
     total_files = count_files_in_commit(repo, commit_id)
-    print(f"\n{'Total files in HEAD:':<22} {total_files}")
-    print(f"{'Total commits:':<22} {total_commits}")
-    print(f"{'Mean Edits per commit:':22} {total_edits / total_commits:,.2f}")
+    print(f"\n{'Total files in HEAD:':<31} {total_files}")
+    print(f"{'Total commits:':<31} {total_commits}")
+    print(f"{'Mean edits per file per commit:':<31} ~{total_edits / total_commits / total_files:,.0f}")
+    print(f"{'Time span:':<31} {timespan.days:,} days")
 
 
 if __name__ == "__main__":
@@ -169,7 +179,7 @@ if __name__ == "__main__":
         print("Usage: python git_stats.py <github-url-or-local-path>")
         exit()
 
-    # get oprtional argument as Boolean
+    # get optional argument as Boolean
     try:
         detail = sys.argv[2] == 'True'
     except:
