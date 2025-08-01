@@ -1,11 +1,12 @@
-import re
 import sys
 import tempfile
-from io import BytesIO
+import difflib
 from dulwich.repo import Repo
 from dulwich import porcelain
+from time import perf_counter
 from urllib.parse import urlparse
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+from dulwich.diff_tree import tree_changes
 
 def clone_or_open(source):
     """ Load a local or remote repo into a Repo object"""
@@ -74,16 +75,12 @@ def analyze(repo, detail):
     commits = [entry.commit for entry in walker]
     commits.reverse()
 
-    # Track commit date range
-    if commits:
-        first_commit_date = datetime.fromtimestamp(commits[0].author_time, tz=timezone.utc)
-        last_commit_date = datetime.fromtimestamp(commits[-1].author_time, tz=timezone.utc)
-        timespan = last_commit_date - first_commit_date
-    else:
-        first_commit_date = last_commit_date = None
-        timespan = timedelta(0)
+    # record first and last commit timestamps
+    first_commit_date = datetime.fromtimestamp(commits[0].author_time, tz=timezone.utc)
+    last_commit_date = datetime.fromtimestamp(commits[-1].author_time, tz=timezone.utc)
+    timespan_days = (last_commit_date - first_commit_date).days
 
-    # init the output
+    # init the output for the detailed output
     if detail:
         print(f"{'Commit':<8} {'Files':<8} {'Insertions':<12} {'Deletions':<10}")
 
@@ -94,97 +91,86 @@ def analyze(repo, detail):
         # increment counter
         total_commits += 1
         
-        # get parent (if there is one)
+        # get the immediate parent in the tree
         parents = commit.parents
-        if parents:
-            parent_tree = repo[parents[0]].tree
-        else:
-            parent_tree = None
+        parent_tree = repo[parents[0]].tree if parents else None
 
-        # count changed files in this commit
-        changes = list(repo.object_store.tree_changes(parent_tree, commit.tree))
+        # init counters
+        files_changed = insertions = deletions = 0
+
+        # if not the first commit, compare to parent (otherwise compare to None)
+        changes = list(tree_changes(repo.object_store, parent_tree, commit.tree))
+
+        # get number of files changed
         files_changed = len(changes)
-        
-        # loop through the files and count insertions and deletions
-        insertions = deletions = 0
 
-        # Prepare diff text by file if we have a parent commit
-        diffs_by_path = {}
-        if parent_tree:
-            buf = BytesIO()
-            porcelain.diff_tree(repo, parent_tree, commit.tree, outstream=buf)
-            diff_text = buf.getvalue().decode("utf-8", errors="ignore")
-
-            # Split the diff text into per-file chunks using the 'diff --git' header lines
-            file_paths = re.findall(r'^diff --git a/(.*) b/.*$', diff_text, flags=re.MULTILINE)
-            file_diffs = re.split(r'^diff --git a/.* b/.*$', diff_text, flags=re.MULTILINE)
-
-            # file_diffs[0] is everything before the first file diff, discard it
-            # Map file path to its corresponding diff chunk
-            diffs_by_path = dict(zip(file_paths, file_diffs[1:]))
-
+        # loop through the changes
         for change in changes:
 
-            # unpack changes tuple
-            old_path, new_path = change[0] 
-            # old_mode, new_mode = changes[1]
-            old_sha, new_sha = change[2]
+            # get the checksum IDs
+            old_sha = getattr(change.old, "sha", None)
+            new_sha = getattr(change.new, "sha", None)
 
-            # if there is a diff to be calculated, get it per file chunk
-            path = new_path or old_path
-            if old_path and new_path and path in diffs_by_path:
-                diff_lines = diffs_by_path[path].splitlines()
-                for line in diff_lines:
-                    if line.startswith("+") and not line.startswith("+++"):
-                        insertions += 1
-                    elif line.startswith("-") and not line.startswith("---"):
-                        deletions += 1
-            
-            # if it's a new file, everything is an insertion
-            elif new_path:
-                try:
-                    blob = repo[new_sha]
-                    insertions += blob.data.count(b"\n")
-                except KeyError:
-                    pass
-            
-            # if the file is removed, everything is a deletion
-            elif old_path:
-                try:
-                    blob = repo[old_sha]
-                    deletions += blob.data.count(b"\n")
-                except KeyError:
-                    pass
+            old_blob_lines = []
+            new_blob_lines = []
 
-        # output the counts
+            # if there is an old version, get it (otherwise empty)
+            if old_sha:
+                try:
+                    old_blob = repo[old_sha]
+                    old_blob_lines = old_blob.data.decode("utf-8", errors="ignore").splitlines()
+                except (KeyError, AttributeError):
+                    old_blob_lines = []
+
+            # if there is a new version, get it (otherwise empty)
+            if new_sha:
+                try:
+                    new_blob = repo[new_sha]
+                    new_blob_lines = new_blob.data.decode("utf-8", errors="ignore").splitlines()
+                except (KeyError, AttributeError):
+                    new_blob_lines = []
+
+            # diff old and new and count insertions and deletions
+            for line in difflib.unified_diff(old_blob_lines, new_blob_lines, lineterm=""):
+                if line.startswith("+") and not line.startswith("+++"):
+                    insertions += 1
+                elif line.startswith("-") and not line.startswith("---"):
+                    deletions += 1
+
+        # output data into table for detailed output
         if detail:
             print(f"{commit.id.decode()[:8]} {files_changed:<8} {insertions:<12} {deletions:<10}")
         
-        # sum total edits (don't do deletions too as it artificially inflates results)
+        # accumulate total edits (insert only to avoid duplication)
         total_edits += insertions
 
-    # output a summary
+    # calculate total files in the HEAD of the repo
     total_files = count_files_in_commit(repo, commit_id)
+
+    # report the brief summary
     print(f"\n{'Total files in HEAD:':<31} {total_files}")
     print(f"{'Total commits:':<31} {total_commits}")
-    print(f"{'Mean edits per file per commit:':<31} ~{total_edits / total_commits / total_files:,.0f}")
-    print(f"{'Time span:':<31} {timespan.days:,} days")
+    print(f"{'Mean Edits per file per commit:':<31} {total_edits / total_commits / total_files:,.2f}")
+    print(f"{'Timespan (days):':<31} {timespan_days:,}")
 
 
 if __name__ == "__main__":
-    
-    # if the argument wasn't provided print help and exit
+
+    # if no args, print help and exit
     if len(sys.argv) < 2:
-        print("Usage: python git_stats.py <github-url-or-local-path>")
+        print("Usage: python git_stats.py <github-url-or-local-path> <detailed-output: True/False>")
         exit()
 
-    # get optional argument as Boolean
+    # get the detailed output flag (default False)
     try:
         detail = sys.argv[2] == 'True'
     except:
         detail = False
 
-    # load the repo and analyse it
+    # get the repo and analyse it
     repo = clone_or_open(sys.argv[1])
+    t1_start = perf_counter() 
     analyze(repo, detail)
+    t1_stop = perf_counter()
+    print(f"{t1_stop-t1_start:.1f} secs.")
     print('\ndone!')
