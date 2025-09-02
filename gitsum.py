@@ -1,5 +1,6 @@
 """
-* This script provides a simple summary of the commit history of a git repo
+* GitSum(mary) provides a simple summary of the commit history of a git repo. It is primarily 
+*   intended to support marking for my programming courses.
 * 
 * Local or remote repos can be analysed, local repos will be read directly, whereas remotes 
 *   will be cloned into a tewmporary directory.
@@ -7,7 +8,7 @@
 * Remote URLs can be in the form https://... or git@..., but the latter will be required 
 *   if you want to make use of SSH keys (instead of typing in credentials).
 *
-* @jonnyhuck
+* @author jonnyhuck
 """
 
 import sys
