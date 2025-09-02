@@ -3,7 +3,7 @@
 *   intended to support marking for my programming courses.
 * 
 * Local or remote repos can be analysed, local repos will be read directly, whereas remotes 
-*   will be cloned into a tewmporary directory.
+*   will be cloned into a temporary directory.
 *
 * Remote URLs can be in the form https://... or git@..., but the latter will be required 
 *   if you want to make use of SSH keys (instead of typing in credentials).
@@ -40,7 +40,8 @@ def git_numstat(url):
             exit()
         
     # start printing output
-    print(f"\n{url}\n")
+    print(f"\n{url}")
+    print("\nTimeline:")
 
     # loop through the commits
     commits_info = []
@@ -81,7 +82,7 @@ def git_numstat(url):
         commit_date = datetime.fromtimestamp(commit.committed_date).strftime('%Y-%m-%d %H:%M:%S')
         
         # print details for this commit
-        print(f"{commit.hexsha[:7]}  {commit_date}  +{added:<4} -{deleted}")
+        print(f" {commit_date} +{added:<4} -{deleted:<4} {commit.message.strip()}")
 
         # store details for this commit
         commits_info.append({
@@ -94,14 +95,23 @@ def git_numstat(url):
     # print summary statistics for this repo
     if commits_info:
         print("\nSummary:")
-        print(f"{"Total commits:":<32} {len(commits_info)}")
-        print(f"{"Timespan (days):":<32} {(commits_info[0]['date'] - commits_info[-1]['date']).days:,}")
+        print(f" {"Total commits:":<32} {len(commits_info)}")
+        print(f" {"Timespan (days):":<32} {(commits_info[0]['date'] - commits_info[-1]['date']).days:,}")
         insertions = [c['added'] for c in commits_info]
-        print(f"{"Mean insertions per commit:":<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})")
+        print(f" {"Mean insertions per commit:":<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})")
         largest = max(commits_info, key=lambda c: c['added'] - c['deleted'])
-        print(f"{"Commit with most net insertions:":<32} {largest['date']} +{largest['added']} (-{largest['deleted']})\n")
+        print(f" {"Commit with most net insertions:":<32} {largest['date']} +{largest['added']} (-{largest['deleted']})\n")
 
 
 # run the script using the first argument as the URL
 if __name__ == "__main__":
-    git_numstat(sys.argv[1])
+
+    # if no url is passed, just use the repo for this tool
+    try:
+        url = sys.argv[1]
+    except:
+        print("\nNo URL provided - defaulting to https://github.com/jonnyhuck/gitsum")
+        url = "https://github.com/jonnyhuck/gitsum"
+
+    # launch the tool using the url
+    git_numstat(url)
