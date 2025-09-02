@@ -19,88 +19,105 @@ from statistics import mean, stdev
 from git.exc import GitCommandError
 from tempfile import TemporaryDirectory
 
+
+def count_lines_in_head(repo):
+    """
+    * Count the total number of lines across all tracked files at HEAD.
+    """
+    total = 0
+    tree = repo.head.commit.tree
+    for blob in tree.traverse():
+        if blob.type == "blob":  # it's a file
+            try:
+                # decode file contents (skip binaries)
+                data = blob.data_stream.read().decode("utf-8", errors="ignore")
+                total += len(data.splitlines())
+            except Exception:
+                continue  # skip if unreadable
+    return total
+
+
 def git_numstat(url):
     """
     * Gather summary statistics about a git repo by cloning into a local repo
     """
-    # test if the URL is local
-    is_local = exists(url)
-    if is_local:
+    # prep a tmp directory just in case (can't get it to delete reliably without with statement)
+    with TemporaryDirectory() as tmpdir:    # EVERYTHING must be in this block
 
+        # test if the URL is local
+        is_local = exists(url)
+        
         # if local, just read it directly
-        repo = Repo(url)
-    else:
-
-        # if remote, clone into a tmp directory
-        tmpdir = TemporaryDirectory()
-        try:
-            repo = Repo.clone_from(url, tmpdir, depth=None)
-        except GitCommandError as e:
-            print(f"\nERROR: could not fetch remote {url} \nEither it doesn't exist, or you don't have permission.\n")
-            exit()
+        if is_local:
+            repo = Repo(url)
         
-    # start printing output
-    print(f"\n{url}")
-    print("\nTimeline:")
+        # if remote, clone into the tmp directory
+        else:
+            try:
+                repo = Repo.clone_from(url, tmpdir, depth=None)
+            except GitCommandError as e:
+                print(f"\nERROR: could not fetch remote {url} \nEither it doesn't exist, or you don't have permission.\n")
+                exit()
+            
+        # start printing output
+        print(f"\n{url}")
+        print("\nTimeline:")
 
-    # loop through the commits
-    commits_info = []
-    for commit in repo.iter_commits():
+        # loop through the commits
+        commits_info = []
+        for commit in repo.iter_commits():
 
-        # catch commits with no parent (should judt be first one)
-        parent = commit.parents[0] if commit.parents else None
-        try:
-            # diff against parent
-            diffs = commit.diff(parent, create_patch=True)
-        except Exception as e:
-            print(f"Skipping commit {commit.hexsha} due to diff error: {e}")
-            continue
+            # catch commits with no parent (should judt be first one)
+            parent = commit.parents[0] if commit.parents else None
+            try:
+                # diff against parent
+                diffs = parent.diff(commit, create_patch=True) if parent else []
+            except Exception as e:
+                print(f"Skipping commit {commit.hexsha} due to diff error: {e}")
+                continue
 
-        # check each line in the diff
-        added, deleted = 0, 0
-        for d in diffs:
-            patch = d.diff.decode('utf-8', errors='ignore').splitlines()
-            for line in patch:
+            # check each line in the diff
+            added, deleted = 0, 0
+            for d in diffs:
+                patch = d.diff.decode('utf-8', errors='ignore').splitlines()
+                for line in patch:
 
-                # ignore metadata
-                if line.startswith('+++') or line.startswith('---'):
-                    continue
-                
-                # count insertions
-                elif line.startswith('+'):
-                    added += 1
-                
-                # count deletions
-                elif line.startswith('-'):
-                    deleted += 1
+                    # ignore metadata
+                    if line.startswith('+++') or line.startswith('---'):
+                        continue
+                    
+                    # count insertions
+                    elif line.startswith('+'):
+                        added += 1
+                    
+                    # count deletions
+                    elif line.startswith('-'):
+                        deleted += 1
 
-        # if we are working with a remote repo, clean up the tmp file
-        if not is_local:
-            tmpdir.cleanup()
+            # get commit date
+            commit_date = datetime.fromtimestamp(commit.committed_date).strftime('%Y-%m-%d %H:%M:%S')
+            
+            # print details for this commit
+            print(f" {commit_date} +{added:<4} -{deleted:<4} {commit.message.strip()}")
 
-        # get commit date
-        commit_date = datetime.fromtimestamp(commit.committed_date).strftime('%Y-%m-%d %H:%M:%S')
-        
-        # print details for this commit
-        print(f" {commit_date} +{added:<4} -{deleted:<4} {commit.message.strip()}")
+            # store details for this commit
+            commits_info.append({
+                'commit': commit.hexsha,
+                'date': datetime.fromtimestamp(commit.committed_date),
+                'added': added,
+                'deleted': deleted
+            })
 
-        # store details for this commit
-        commits_info.append({
-            'commit': commit.hexsha,
-            'date': datetime.fromtimestamp(commit.committed_date),
-            'added': added,
-            'deleted': deleted
-        })
-
-    # print summary statistics for this repo
-    if commits_info:
-        print("\nSummary:")
-        print(f" {"Total commits:":<32} {len(commits_info)}")
-        print(f" {"Timespan (days):":<32} {(commits_info[0]['date'] - commits_info[-1]['date']).days:,}")
-        insertions = [c['added'] for c in commits_info]
-        print(f" {"Mean insertions per commit:":<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})")
-        largest = max(commits_info, key=lambda c: c['added'] - c['deleted'])
-        print(f" {"Commit with most net insertions:":<32} {largest['date']} +{largest['added']} (-{largest['deleted']})\n")
+        # print summary statistics for this repo
+        if commits_info:
+            print("\nSummary:")
+            print(f" {"Total commits:":<32} {len(commits_info)}")
+            print(f" {"Timespan (days):":<32} {(commits_info[0]['date'] - commits_info[-1]['date']).days:,}")
+            print(f" {"Total lines in HEAD:":<32} {count_lines_in_head(repo)}")
+            insertions = [c['added'] for c in commits_info]
+            print(f" {"Mean insertions per commit:":<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})")
+            largest = max(commits_info, key=lambda c: c['added'] - c['deleted'])
+            print(f" {"Commit with most net insertions:":<32} {largest['date']} +{largest['added']} (-{largest['deleted']})\n")
 
 
 # run the script using the first argument as the URL
