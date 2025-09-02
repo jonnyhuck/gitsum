@@ -5,7 +5,9 @@ from io import BytesIO
 from dulwich.repo import Repo
 from dulwich import porcelain
 from urllib.parse import urlparse
+from numpy import array, histogram
 from datetime import datetime, timedelta, timezone
+from dulwich.object_store import iter_tree_contents
 
 def clone_or_open(source):
     """ Load a local or remote repo into a Repo object"""
@@ -49,7 +51,7 @@ def count_files_in_commit(repo, commit_id):
     
     # loop through files
     count = 0
-    for path, mode, sha in repo.object_store.iter_tree_contents(tree_id):
+    for path, mode, sha in iter_tree_contents(repo.object_store, tree_id):
         
         # convert mode from bytes to int (octal)
         if isinstance(mode, bytes):
@@ -78,10 +80,10 @@ def analyze(repo, detail):
     if commits:
         first_commit_date = datetime.fromtimestamp(commits[0].author_time, tz=timezone.utc)
         last_commit_date = datetime.fromtimestamp(commits[-1].author_time, tz=timezone.utc)
-        timespan = last_commit_date - first_commit_date
+        timespan_days = (last_commit_date - first_commit_date).days
     else:
         first_commit_date = last_commit_date = None
-        timespan = timedelta(0)
+        timespan_days = timedelta(0).days
 
     # init the output
     if detail:
@@ -89,6 +91,7 @@ def analyze(repo, detail):
 
     # loop through commits
     total_commits = total_edits = 0
+    insertions = deletions = []
     for commit in commits:
         
         # increment counter
@@ -106,7 +109,7 @@ def analyze(repo, detail):
         files_changed = len(changes)
         
         # loop through the files and count insertions and deletions
-        insertions = deletions = 0
+        insertion_count = deletion_count = 0
 
         # Prepare diff text by file if we have a parent commit
         diffs_by_path = {}
@@ -119,10 +122,10 @@ def analyze(repo, detail):
             file_paths = re.findall(r'^diff --git a/(.*) b/.*$', diff_text, flags=re.MULTILINE)
             file_diffs = re.split(r'^diff --git a/.* b/.*$', diff_text, flags=re.MULTILINE)
 
-            # file_diffs[0] is everything before the first file diff, discard it
             # Map file path to its corresponding diff chunk
             diffs_by_path = dict(zip(file_paths, file_diffs[1:]))
 
+        # loop through the changes
         for change in changes:
 
             # unpack changes tuple
@@ -136,15 +139,15 @@ def analyze(repo, detail):
                 diff_lines = diffs_by_path[path].splitlines()
                 for line in diff_lines:
                     if line.startswith("+") and not line.startswith("+++"):
-                        insertions += 1
+                        insertion_count += 1
                     elif line.startswith("-") and not line.startswith("---"):
-                        deletions += 1
+                        deletion_count += 1
             
             # if it's a new file, everything is an insertion
             elif new_path:
                 try:
                     blob = repo[new_sha]
-                    insertions += blob.data.count(b"\n")
+                    insertion_count += blob.data.count(b"\n")
                 except KeyError:
                     pass
             
@@ -152,39 +155,57 @@ def analyze(repo, detail):
             elif old_path:
                 try:
                     blob = repo[old_sha]
-                    deletions += blob.data.count(b"\n")
+                    deletion_count += blob.data.count(b"\n")
                 except KeyError:
                     pass
 
+        # record insertions and deletions
+        insertions.append(insertion_count)
+        deletions.append(deletion_count)
+
         # output the counts
         if detail:
-            print(f"{commit.id.decode()[:8]} {files_changed:<8} {insertions:<12} {deletions:<10}")
-        
-        # sum total edits (don't do deletions too as it artificially inflates results)
-        total_edits += insertions
+            print(f"{commit.id.decode()[:8]} {files_changed:<8} {insertion_count:<12} {deletion_count:<10}")
 
-    # output a summary
+    # calculate total files in the HEAD of the repo
     total_files = count_files_in_commit(repo, commit_id)
-    print(f"\n{'Total files in HEAD:':<31} {total_files}")
-    print(f"{'Total commits:':<31} {total_commits}")
-    print(f"{'Mean edits per file per commit:':<31} ~{total_edits / total_commits / total_files:,.0f}")
-    print(f"{'Time span:':<31} {timespan.days:,} days")
+
+    # return summary values
+    return total_files, total_commits, timespan_days, array(insertions), array(deletions)
 
 
+# if run as main function, print a text summary
 if __name__ == "__main__":
-    
-    # if the argument wasn't provided print help and exit
+
+    # if no args, print help and exit
     if len(sys.argv) < 2:
-        print("Usage: python git_stats.py <github-url-or-local-path>")
+        print("Usage: python git_stats.py <github-url-or-local-path> <detailed-output: True/False>")
         exit()
 
-    # get optional argument as Boolean
+    # get the detailed output flag (default False)
     try:
         detail = sys.argv[2] == 'True'
     except:
         detail = False
 
-    # load the repo and analyse it
+    # get the repo and analyse it
     repo = clone_or_open(sys.argv[1])
-    analyze(repo, detail)
-    print('\ndone!')
+    total_files, total_commits, timespan_days, insertions, deletions = analyze(repo, detail)
+
+    # report the brief summary and histogram
+    print(f"\n{'Total files in HEAD:':>27} {total_files}")
+    print(f"{'Total commits:':>27} {total_commits}")
+    print(f"{'Timespan (days):':>27} {timespan_days:,}")
+    print(f"{'Biggest insertion:':>27} +{insertions.max()} -{deletions[insertions.argmax()]}")
+    print(f"{'Smallest insertion:':>27} +{insertions.min()} -{deletions[insertions.argmin()]}")
+    print(f"{'Mean insertions per commit:':>27} {insertions.mean():.1f} (std. {insertions.std():.1f})\n")
+    # print(f"{'Insertions histogram:':>27} {"count":<6} {"value"}")
+    # h = histogram(insertions , 10)
+    # for i in range(len(h[0])):
+    #     print(f"{'':>27} {h[0][i]:<6} {h[1][i]:.1f}")
+
+    # report the largest 5 commits (by insertion)
+    # print(f"\n{'Top 5 insertions:':>27} {"Insertions":<11} {"Deletions"}")
+    # indices = (-insertions).argsort()[:5]
+    # for i in indices:
+    #     print(f"{'':>27} +{insertions[i]:<11} -{deletions[i]}")
