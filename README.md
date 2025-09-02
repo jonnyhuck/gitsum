@@ -15,29 +15,32 @@ The script ereturns a list of all of the commits in the form (date, inserted lin
 
 ```txt
 
-git@github.com:jonnyhuck/gitsum.git
+https://github.com/jonnyhuck/gitsum
 
 Timeline:
- 2025-09-02 17:02:39 +4    -1    remove outdated references to dulwich
- 2025-09-02 17:01:58 +2    -3    fix comments
- 2025-09-02 16:59:39 +52   -82   avoid cloning for local repos
- 2025-09-02 16:31:59 +208  -73   replace dulwich with gitpython
+ 2025-09-02 19:57:37 +92   -75   add total lines count and fix tmp directory not deleting
+ 2025-09-02 19:28:01 +61   -10   add commit messages to the log output and update README
+ 2025-09-02 17:02:39 +1    -4    remove outdated references to dulwich
+ 2025-09-02 17:01:58 +3    -2    fix comments
+ 2025-09-02 16:59:39 +82   -52   avoid cloning for local repos
+ 2025-09-02 16:31:59 +73   -208  replace dulwich with gitpython
  2025-09-02 15:00:14 +8    -8    uncomment report
- 2025-09-02 14:52:22 +25   -46   update for more detailed report
+ 2025-09-02 14:52:22 +46   -25   update for more detailed report
  2025-08-01 16:08:21 +1    -1    fix link
- 2025-08-01 16:07:28 +0    -3    added note on porcelain
- 2025-08-01 14:31:52 +4    -3    updated deprecated function
- 2025-08-01 14:09:00 +8    -18   add timespan reporting
- 2025-08-01 14:09:00 +16   -30   initial commit
- 2025-08-01 14:09:00 +0    -168  initial commit
- 2025-08-01 14:05:02 +109  -1    Initial commit
+ 2025-08-01 16:07:28 +3    -0    added note on porcelain
+ 2025-08-01 14:31:52 +3    -4    updated deprecated function
+ 2025-08-01 14:09:00 +18   -8    add timespan reporting
+ 2025-08-01 14:09:00 +30   -16   initial commit
+ 2025-08-01 14:09:00 +168  -0    initial commit
+ 2025-08-01 14:05:02 +0    -0    Initial commit
 
 Summary:
- Total commits:                   13
+ Total commits:                   15
  Timespan (days):                 32
- Mean insertions per commit:      33.62 (std: 60.69)
- Commit with most net insertions: 2025-09-02 16:31:59 +208 (-73)
+ Total lines in HEAD:             852
+ Mean insertions per commit:      39.27 (std: 48.38)
+ Commit with most net insertions: 2025-08-01 14:09:00 +168 (-0)
 ```
 
 ### Dependencies
-This script relies on the excellent (`GitPython`)[https://github.com/gitpython-developers/GitPython] library.
+This script relies on the excellent [`GitPython`](https://github.com/gitpython-developers/GitPython) library.
