@@ -199,13 +199,13 @@ if __name__ == "__main__":
     print(f"{'Biggest insertion:':>27} +{insertions.max()} -{deletions[insertions.argmax()]}")
     print(f"{'Smallest insertion:':>27} +{insertions.min()} -{deletions[insertions.argmin()]}")
     print(f"{'Mean insertions per commit:':>27} {insertions.mean():.1f} (std. {insertions.std():.1f})\n")
-    # print(f"{'Insertions histogram:':>27} {"count":<6} {"value"}")
-    # h = histogram(insertions , 10)
-    # for i in range(len(h[0])):
-    #     print(f"{'':>27} {h[0][i]:<6} {h[1][i]:.1f}")
+    print(f"{'Insertions histogram:':>27} {"count":<6} {"value"}")
+    h = histogram(insertions , 10)
+    for i in range(len(h[0])):
+        print(f"{'':>27} {h[0][i]:<6} {h[1][i]:.1f}")
 
     # report the largest 5 commits (by insertion)
-    # print(f"\n{'Top 5 insertions:':>27} {"Insertions":<11} {"Deletions"}")
-    # indices = (-insertions).argsort()[:5]
-    # for i in indices:
-    #     print(f"{'':>27} +{insertions[i]:<11} -{deletions[i]}")
+    print(f"\n{'Top 5 insertions:':>27} {"Insertions":<11} {"Deletions"}")
+    indices = (-insertions).argsort()[:5]
+    for i in indices:
+        print(f"{'':>27} +{insertions[i]:<11} -{deletions[i]}")
