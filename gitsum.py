@@ -65,7 +65,11 @@ def git_numstat(url):
 
         # loop through the commits
         commits_info = []
+        active_dates = set()
         for commit in repo.iter_commits():
+
+            # log commit date
+            active_dates.add(datetime.fromtimestamp(commit.committed_date).date())
 
             # catch commits with no parent (should judt be first one)
             parent = commit.parents[0] if commit.parents else None
@@ -112,7 +116,7 @@ def git_numstat(url):
         if commits_info:
             print("\nSummary:")
             print(f" {"Total commits:":<32} {len(commits_info)}")
-            print(f" {"Timespan (days):":<32} {(commits_info[0]['date'] - commits_info[-1]['date']).days:,}")
+            print(f" {"Timespan (days):":<32} {(commits_info[0]['date'] - commits_info[-1]['date']).days:,} ({len(active_dates)} active)")
             print(f" {"Total lines in HEAD:":<32} {count_lines_in_head(repo)}")
             insertions = [c['added'] for c in commits_info]
             print(f" {"Mean insertions per commit:":<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})")
