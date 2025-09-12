@@ -14,9 +14,12 @@ If you just want to test it, running `python gitsum.py` with no argument will ru
 The script ereturns a list of all of the commits in the form (date, inserted lines, removed lines, message). It then provides a summary of the commits, including the number, timespan, mean insertions per commmit and the commit with the greatest net insertions:
 
 ```txt
+No URL provided - defaulting to https://github.com/jonnyhuck/gitsum
+
 https://github.com/jonnyhuck/gitsum
 
 Timeline:
+ 2025-09-03 08:51:50 +6    -5    update README output example with active days
  2025-09-03 08:50:54 +5    -1    added active days as well as timespan
  2025-09-02 19:59:18 +19   -16   fix link in README
  2025-09-02 19:57:37 +92   -75   add total lines count and fix tmp directory not deleting
@@ -36,10 +39,10 @@ Timeline:
  2025-08-01 14:05:02 +0    -0    Initial commit
 
 Summary:
- Total commits:                   17
+ Total commits:                   18
  Timespan (days):                 32 (3 active)
- Total lines in HEAD:             859
- Mean insertions per commit:      36.06 (std: 46.22)
+ Total lines in HEAD:             860
+ Mean insertions per commit:      34.39 (std: 45.39)
  Commit with most net insertions: 2025-08-01 14:09:00 +168 (-0)
 ```
 
