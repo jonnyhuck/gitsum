@@ -117,8 +117,10 @@ def git_numstat(url):
             print("\nSummary:")
             print(f" {'Total commits:':<32} {len(commits_info)}")
             print(f" {'Timespan (days):':<32} {(commits_info[0]['date'] - commits_info[-1]['date']).days:,} ({len(active_dates)} active)")
-            print(f" {'Total lines in HEAD:':<32} {count_lines_in_head(repo)}")
+            n_lines_head = count_lines_in_head(repo)
+            print(f" {'Total lines in HEAD:':<32} {n_lines_head}")
             insertions = [c['added'] for c in commits_info]
+            print(f" {'Estimated unedited lines:':<32} {max(n_lines_head - sum(insertions), 0)}")
             print(f" {'Mean insertions per commit:':<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})")
             largest = max(commits_info, key=lambda c: c['added'] - c['deleted'])
             print(f" {'Commit with most net insertions:':<32} {largest['date']} +{largest['added']} (-{largest['deleted']})\n")
