@@ -13,10 +13,11 @@
 
 import sys
 from git import Repo
-from os.path import exists
+from pathlib import Path
 from datetime import datetime
 from statistics import mean, stdev
 from git.exc import GitCommandError
+from os.path import exists, basename
 from tempfile import TemporaryDirectory
 
 
@@ -37,94 +38,128 @@ def count_lines_in_head(repo):
     return total
 
 
-def git_numstat(url):
+def get_report(url, repo):
+    """
+    * Produce a summary report for a repo object
+    """
+    # init empty message
+    msg = f"\n{url}\n\nTimeline:"
+
+    # loop through the commits
+    commits_info = []
+    active_dates = set()
+    for commit in repo.iter_commits():
+
+        # log commit date
+        active_dates.add(datetime.fromtimestamp(commit.committed_date).date())
+
+        # catch commits with no parent (should judt be first one)
+        parent = commit.parents[0] if commit.parents else None
+        try:
+            # diff against parent
+            diffs = parent.diff(commit, create_patch=True) if parent else []
+        except Exception as e:
+            msg += f"\nSkipping commit {commit.hexsha} due to diff error: {e}"
+            continue
+
+        # check each line in the diff
+        added, deleted = 0, 0
+        for d in diffs:
+            patch = d.diff.decode('utf-8', errors='ignore').splitlines()
+            for line in patch:
+
+                # ignore metadata
+                if line.startswith('+++') or line.startswith('---'):
+                    continue
+                
+                # count insertions
+                elif line.startswith('+'):
+                    added += 1
+                
+                # count deletions
+                elif line.startswith('-'):
+                    deleted += 1
+
+        # get commit date
+        commit_date = datetime.fromtimestamp(commit.committed_date).strftime('%Y-%m-%d %H:%M:%S')
+        
+        # print details for this commit
+        msg += f"\n {commit_date} +{added:<4} -{deleted:<4} {commit.message.strip()}"
+
+        # store details for this commit
+        commits_info.append({
+            'commit': commit.hexsha,
+            'date': datetime.fromtimestamp(commit.committed_date),
+            'added': added,
+            'deleted': deleted
+        })
+
+    # create summary statistics text for this repo
+    if commits_info:
+        msg += "\n\nSummary:"
+        msg += f"\n {'Total commits:':<32} {len(commits_info)}"
+        msg += f"\n {'Timespan (days):':<32} {(commits_info[0]['date'] - commits_info[-1]['date']).days:,} ({len(active_dates)} active)"
+        n_lines_head = count_lines_in_head(repo)
+        msg += f"\n {'Total lines in HEAD:':<32} {n_lines_head}"
+        insertions = [c['added'] for c in commits_info]
+        msg += f"\n {'Estimated unedited lines:':<32} {max(n_lines_head - sum(insertions), 0)}"
+        msg += f"\n {'Mean insertions per commit:':<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})"
+        largest = max(commits_info, key=lambda c: c['added'] - c['deleted'])
+        msg += f"\n {'Commit with most net insertions:':<32} {largest['date']} +{largest['added']} (-{largest['deleted']})\n"
+    
+    # return the text
+    return msg
+
+
+def git_numstat(url, clone_path=None):
     """
     * Gather summary statistics about a git repo by cloning into a local repo
     """
-    # prep a tmp directory just in case (can't get it to delete reliably without with statement)
-    with TemporaryDirectory() as tmpdir:    # EVERYTHING must be in this block
+    # if local, just read it directly
+    if exists(url):
+        repo = Repo(url)
 
-        # test if the URL is local
-        is_local = exists(url)
-        
-        # if local, just read it directly
-        if is_local:
-            repo = Repo(url)
-        
-        # if remote, clone into the tmp directory
-        else:
+    # otherwise, it is remote
+    else:
+
+        # if there is a clone path, make a copy of the repo there
+        if clone_path:
+
+            # get the path and make sure it exists
+            path = Path(clone_path)
+            path.mkdir(parents=True, exist_ok=True)
+
+            # create a subdirectory name based on the repo name
+            repo_name = basename(url.rstrip("/")).replace(".git", "")
+            clone_dir = path / repo_name
+
+            # clone the repo into the desired directory
             try:
-                repo = Repo.clone_from(url, tmpdir, depth=None)
-            except GitCommandError as e:
+                repo = Repo.clone_from(url, clone_dir, depth=None)
+            except GitCommandError:
                 print(f"\nERROR: could not fetch remote {url} \nEither it doesn't exist, or you don't have permission.\n")
                 exit()
             
-        # start printing output
-        print(f"\n{url}")
-        print("\nTimeline:")
-
-        # loop through the commits
-        commits_info = []
-        active_dates = set()
-        for commit in repo.iter_commits():
-
-            # log commit date
-            active_dates.add(datetime.fromtimestamp(commit.committed_date).date())
-
-            # catch commits with no parent (should judt be first one)
-            parent = commit.parents[0] if commit.parents else None
-            try:
-                # diff against parent
-                diffs = parent.diff(commit, create_patch=True) if parent else []
-            except Exception as e:
-                print(f"Skipping commit {commit.hexsha} due to diff error: {e}")
-                continue
-
-            # check each line in the diff
-            added, deleted = 0, 0
-            for d in diffs:
-                patch = d.diff.decode('utf-8', errors='ignore').splitlines()
-                for line in patch:
-
-                    # ignore metadata
-                    if line.startswith('+++') or line.startswith('---'):
-                        continue
-                    
-                    # count insertions
-                    elif line.startswith('+'):
-                        added += 1
-                    
-                    # count deletions
-                    elif line.startswith('-'):
-                        deleted += 1
-
-            # get commit date
-            commit_date = datetime.fromtimestamp(commit.committed_date).strftime('%Y-%m-%d %H:%M:%S')
+            # get the summary text and return
+            return get_report(url, repo)
             
-            # print details for this commit
-            print(f" {commit_date} +{added:<4} -{deleted:<4} {commit.message.strip()}")
+        # if not, use a temp directory
+        else:
 
-            # store details for this commit
-            commits_info.append({
-                'commit': commit.hexsha,
-                'date': datetime.fromtimestamp(commit.committed_date),
-                'added': added,
-                'deleted': deleted
-            })
-
-        # print summary statistics for this repo
-        if commits_info:
-            print("\nSummary:")
-            print(f" {'Total commits:':<32} {len(commits_info)}")
-            print(f" {'Timespan (days):':<32} {(commits_info[0]['date'] - commits_info[-1]['date']).days:,} ({len(active_dates)} active)")
-            n_lines_head = count_lines_in_head(repo)
-            print(f" {'Total lines in HEAD:':<32} {n_lines_head}")
-            insertions = [c['added'] for c in commits_info]
-            print(f" {'Estimated unedited lines:':<32} {max(n_lines_head - sum(insertions), 0)}")
-            print(f" {'Mean insertions per commit:':<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})")
-            largest = max(commits_info, key=lambda c: c['added'] - c['deleted'])
-            print(f" {'Commit with most net insertions:':<32} {largest['date']} +{largest['added']} (-{largest['deleted']})\n")
-
+            # prep a tmp directory just in case (can't get it to delete reliably without with statement)
+            with TemporaryDirectory() as tmpdir:    # NB: all repo refs must be inside with statement
+                print(f"created tmp directory: {tmpdir}")
+                
+                # clone the repo into the tmp directory
+                try:
+                    repo = Repo.clone_from(url, tmpdir, depth=None)
+                except GitCommandError:
+                    print(f"\nERROR: could not fetch remote {url} \nEither it doesn't exist, or you don't have permission.\n")
+                    exit()
+                
+                # get the summary text and return
+                return get_report(url, repo)
+            
 
 # run the script using the first argument as the URL
 if __name__ == "__main__":
@@ -137,4 +172,5 @@ if __name__ == "__main__":
         url = "https://github.com/jonnyhuck/gitsum"
 
     # launch the tool using the url
-    git_numstat(url)
+    msg = git_numstat(url)
+    print(msg)
