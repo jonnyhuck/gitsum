@@ -9,7 +9,7 @@ from pandas import read_excel, DataFrame
 
 # setup
 output_dir = 'UGIS-2025-A1'
-repos = read_excel('UGIS-2025-A1/dashboard-export-01-21-pm-2025-11-14.xlsx')
+repos = read_excel('UGIS-2025-A1/dashboard-export-01-21-pm-2025-11-14.xlsx')[46:]
 
 # outut data structures
 inaccessible_repos = []
@@ -49,10 +49,27 @@ for n, row in repos.iterrows():
     # get file paths
     children = [d for d in listdir(student_dir) if isdir(join(student_dir, d))]
     script_path = join(student_dir, children[0])  # each of these is in a subdirectory of unknown name
+    script_file = join(script_path, "assessment1.py")
     output_path = join(student_dir, "output.txt")
 
     # if the script is in place
-    if exists(script_path):
+    if exists(script_file):
+
+        '''fix file path (if needed)'''
+
+        # read Python file
+        with open(script_file, "r", encoding="utf-8") as f:
+            script_text = f.read()
+
+        # process code as required
+        fixed_text = script_text.replace("../data", "data")     # replace any occurrence of `../data` with `data`
+        fixed_text = script_text.replace("show()", "#show()")   # comment out show statements
+
+        # write back to the same file
+        with open(script_file, "w", encoding="utf-8") as f:
+            f.write(fixed_text)
+
+        ''' run the script'''
         
         # run the script in its directory, capture stdout and stderr in file
         with open(output_path, "w", encoding="utf-8") as f:
