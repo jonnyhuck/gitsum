@@ -3,9 +3,9 @@
 *   intended to support marking for my programming courses.
 * 
 * Local or remote repos can be analysed, local repos will be read directly, whereas remotes 
-*   will be cloned into a temporary directory.
+*   will be cloned into a temporary directory for analysis.
 *
-* Remote URLs can be in the form https://... or git@..., but the latter will be required 
+* Remote URLs can be in the form https://... or git@..., - the latter will be required 
 *   if you want to make use of SSH keys (instead of typing in credentials).
 *
 * @author jonnyhuck
@@ -82,9 +82,9 @@ def get_report(url, repo):
 
         # get commit date
         commit_date = datetime.fromtimestamp(commit.committed_date).strftime('%Y-%m-%d %H:%M:%S')
-        
+
         # print details for this commit
-        msg += f"\n {commit_date} +{added:<4} -{deleted:<4} {commit.message.strip()}"
+        msg += f"\n {commit_date} ({commit.hexsha[:7]}) +{added:<4} -{deleted:<4} ({added - deleted:<4}) {commit.message.strip()}"
 
         # store details for this commit
         commits_info.append({
@@ -98,14 +98,14 @@ def get_report(url, repo):
     if commits_info:
         msg += "\n\nSummary:"
         msg += f"\n {'Total commits:':<32} {len(commits_info)}"
-        msg += f"\n {'Timespan (days):':<32} {(commits_info[0]['date'] - commits_info[-1]['date']).days:,} ({len(active_dates)} active)"
+        msg += f"\n {'Timespan (days):':<32} {(commits_info[0]['date'] - commits_info[-1]['date']).days + 1:,} ({len(active_dates)} active)"
         n_lines_head = count_lines_in_head(repo)
         msg += f"\n {'Total lines in HEAD:':<32} {n_lines_head}"
         insertions = [c['added'] for c in commits_info]
         msg += f"\n {'Estimated unedited lines:':<32} {max(n_lines_head - sum(insertions), 0)}"
         msg += f"\n {'Mean insertions per commit:':<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})"
         largest = max(commits_info, key=lambda c: c['added'] - c['deleted'])
-        msg += f"\n {'Commit with most net insertions:':<32} {largest['date']} +{largest['added']} (-{largest['deleted']})\n"
+        msg += f"\n {'Commit with most net insertions:':<32} {largest['date']} +{largest['added']} -{largest['deleted']} ({added - deleted:<4})\n"
     
     # return the text
     return msg

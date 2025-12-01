@@ -1,19 +1,22 @@
+from re import sub
 from time import perf_counter
 from gitsum import git_numstat
 from os import makedirs, listdir
 from subprocess import run, STDOUT
 from collections import defaultdict
 from os.path import join, exists, isdir
-from pandas import read_excel, DataFrame
+from pandas import read_excel, read_csv, DataFrame
 
 
 # setup
 output_dir = 'UGIS-2025-A1'
-repos = read_excel('UGIS-2025-A1/dashboard-export-01-21-pm-2025-11-14.xlsx')[46:]
+# repos = read_excel('UGIS-2025-A1/dashboard-export-01-21-pm-2025-11-14.xlsx')
+repos = read_csv('UGIS-2025-A1/26_December 1, 2025_09.26.csv')
 
 # outut data structures
 inaccessible_repos = []
 unrunnable_repos = []
+invalid_repos = []
 timings = defaultdict(list)
 
 # for each repo
@@ -23,6 +26,11 @@ for n, row in repos.iterrows():
 
     ''' get git summary '''
     
+    # if they sent a template URL, then report and skip
+    if row['Link'] in ["https://github.com/jonny-huck/ugis-assessment1.git", "https://github.com/gis-123456789/ugis-assessment1.git"]:
+        invalid_repos.append(row)
+        continue
+
     # get repo path
     student_dir = f"{output_dir}/{row['Student ID']}"
     outpath = join(student_dir, "git.txt")
@@ -57,13 +65,13 @@ for n, row in repos.iterrows():
 
         '''fix file path (if needed)'''
 
-        # read Python file
+        # read python file
         with open(script_file, "r", encoding="utf-8") as f:
             script_text = f.read()
 
-        # process code as required
-        fixed_text = script_text.replace("../data", "data")     # replace any occurrence of `../data` with `data`
-        fixed_text = script_text.replace("show()", "#show()")   # comment out show statements
+        # process code to avoid show statements and incorrect file paths
+        fixed_text = sub(r"\.\./(?:\.\./)?data", "data", script_text)
+        fixed_text = sub(r"(?:plt\.)?show\(\)", r"# \g<0>", fixed_text)
 
         # write back to the same file
         with open(script_file, "w", encoding="utf-8") as f:
@@ -91,6 +99,12 @@ if len(inaccessible_repos) > 0:
 if len(unrunnable_repos) > 0:
     print(f'\nCould not run assessment1.py in the following repos:')
     for id, url in unrunnable_repos:
+        print(f"- {id} ({url})")
+
+# report any invalid URLs (e.g., my template or 123456789)
+if len(invalid_repos) > 0:
+    print(f'\nThe following students submitted invalid repos:')
+    for id, url in invalid_repos:
         print(f"- {id} ({url})")
 
 # output timings
