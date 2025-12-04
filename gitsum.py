@@ -14,14 +14,14 @@
 import sys
 from git import Repo
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from statistics import mean, stdev
 from git.exc import GitCommandError
 from os.path import exists, basename
 from tempfile import TemporaryDirectory
 
 
-def count_lines_in_head(repo):
+def count_lines_in_head(repo, extensions=[".py", ".R"]):
     """
     * Count the total number of lines across all tracked files at HEAD.
     """
@@ -34,8 +34,8 @@ def count_lines_in_head(repo):
         # it's a file
         if blob.type == "blob":  
             
-            # ignore the exclusion directory
-            if "/" in blob.path:
+            # limit to desired file extensions only
+            if blob.path[-3:] not in extensions:
                 continue
 
             try:
@@ -61,12 +61,13 @@ def get_report(url, repo):
     # loop through the commits
     commits_info = []
     active_dates = set()
+    last_date = datetime.fromtimestamp(0)
     for commit in repo.iter_commits():
 
         # log commit date
         active_dates.add(datetime.fromtimestamp(commit.committed_date).date())
 
-        # catch commits with no parent (should judt be first one)
+        # catch commits with no parent (should just be first one)
         parent = commit.parents[0] if commit.parents else None
         try:
             # diff against parent
@@ -94,11 +95,26 @@ def get_report(url, repo):
                     deleted += 1
 
         # get commit date
-        commit_date = datetime.fromtimestamp(commit.committed_date).strftime('%Y-%m-%d %H:%M:%S')
+        commit_date = datetime.fromtimestamp(commit.committed_date)
+
+        # add warning flags for short gaps between commits
+        # TODO: these could do with being on the row above really (slight faff as it is the previous one)
+        mins_between = (last_date - commit_date).total_seconds() / 60
+        if 0 < mins_between < 2:    # < 2 mins
+            bang = "!!!"
+        elif 0 < mins_between < 5:  # < 5 mins
+            bang = "!!"
+        elif 0 < mins_between < 10: # < 10 mins
+            bang = "!"
+        else:
+            bang = ""
+        print(last_date, commit_date, mins_between, bang)
+
+        # cache last time
+        last_date = commit_date
 
         # print details for this commit
-        msg += (f"\n {commit_date} {commit.hexsha[:7]} +{added:<4} -{deleted:<4} {f'({added - deleted})':<4} {commit.message.strip()}")
-
+        msg += (f"\n {commit_date.strftime('%Y-%m-%d %H:%M:%S')} {commit.hexsha[:7]} {bang:<3} +{added:<4} -{deleted:<4} {f'({added - deleted})':<4} {commit.message.strip()}")
 
         # store details for this commit
         commits_info.append({
@@ -116,7 +132,6 @@ def get_report(url, repo):
         n_lines_head = count_lines_in_head(repo)
         msg += f"\n {'Total lines in HEAD:':<32} {n_lines_head}"
         insertions = [c['added'] for c in commits_info]
-        print(sum(insertions))
         msg += f"\n {'Estimated unedited lines:':<32} {max(n_lines_head - (sum(insertions) - n_lines_head) - 1, 0)}"
         msg += f"\n {'Mean insertions per commit:':<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})"
         largest = max(commits_info, key=lambda c: c['added'] - c['deleted'])
