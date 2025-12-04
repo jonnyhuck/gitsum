@@ -27,14 +27,27 @@ def count_lines_in_head(repo):
     """
     total = 0
     tree = repo.head.commit.tree
+    
+    # walk through the tree
     for blob in tree.traverse():
-        if blob.type == "blob":  # it's a file
+        
+        # it's a file
+        if blob.type == "blob":  
+            
+            # ignore the exclusion directory
+            if "/" in blob.path:
+                continue
+
             try:
                 # decode file contents (skip binaries)
                 data = blob.data_stream.read().decode("utf-8", errors="ignore")
+                
+                # count the lines
                 total += len(data.splitlines())
+            
+            # skip if unreadable
             except Exception:
-                continue  # skip if unreadable
+                continue  
     return total
 
 
@@ -84,7 +97,8 @@ def get_report(url, repo):
         commit_date = datetime.fromtimestamp(commit.committed_date).strftime('%Y-%m-%d %H:%M:%S')
 
         # print details for this commit
-        msg += f"\n {commit_date} ({commit.hexsha[:7]}) +{added:<4} -{deleted:<4} ({added - deleted:<4}) {commit.message.strip()}"
+        msg += (f"\n {commit_date} {commit.hexsha[:7]} +{added:<4} -{deleted:<4} {f'({added - deleted})':<4} {commit.message.strip()}")
+
 
         # store details for this commit
         commits_info.append({
@@ -102,10 +116,11 @@ def get_report(url, repo):
         n_lines_head = count_lines_in_head(repo)
         msg += f"\n {'Total lines in HEAD:':<32} {n_lines_head}"
         insertions = [c['added'] for c in commits_info]
-        msg += f"\n {'Estimated unedited lines:':<32} {max(n_lines_head - sum(insertions), 0)}"
+        print(sum(insertions))
+        msg += f"\n {'Estimated unedited lines:':<32} {max(n_lines_head - (sum(insertions) - n_lines_head) - 1, 0)}"
         msg += f"\n {'Mean insertions per commit:':<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})"
         largest = max(commits_info, key=lambda c: c['added'] - c['deleted'])
-        msg += f"\n {'Commit with most net insertions:':<32} {largest['date']} +{largest['added']} -{largest['deleted']} ({added - deleted:<4})\n"
+        msg += f"\n {'Commit with most net insertions:':<32} {largest['date']} +{largest['added']} -{largest['deleted']} {f"({largest['added'] - largest['deleted']})":<4}\n"
     
     # return the text
     return msg
@@ -167,10 +182,16 @@ if __name__ == "__main__":
     # if no url is passed, just use the repo for this tool
     try:
         url = sys.argv[1]
-    except:
+    except IndexError:
         print("\nNo URL provided - defaulting to https://github.com/jonnyhuck/gitsum")
         url = "https://github.com/jonnyhuck/gitsum"
 
-    # launch the tool using the url
-    msg = git_numstat(url)
+    # launch the tool using the url (store in directory if required)
+    try:
+        output_dir = sys.argv[2]
+        msg = git_numstat(url, output_dir)
+    except IndexError:
+        msg = git_numstat(url)
+    
+    # print the resulting message
     print(msg)

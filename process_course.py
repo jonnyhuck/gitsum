@@ -12,6 +12,7 @@ from pandas import read_excel, read_csv, DataFrame
 output_dir = 'UGIS-2025-A1'
 # repos = read_excel('UGIS-2025-A1/dashboard-export-01-21-pm-2025-11-14.xlsx')
 repos = read_csv('UGIS-2025-A1/26_December 1, 2025_09.26.csv')
+run_new_only = True
 
 # outut data structures
 inaccessible_repos = []
@@ -63,29 +64,33 @@ for n, row in repos.iterrows():
     # if the script is in place
     if exists(script_file):
 
-        '''fix file path (if needed)'''
+        # if set to run new repos only, then only run if an output isn't in place
+        if not run_new_only or (run_new_only and not exists(output_path)):
 
-        # read python file
-        with open(script_file, "r", encoding="utf-8") as f:
-            script_text = f.read()
+            '''fix file path (if needed)'''
 
-        # process code to avoid show statements and incorrect file paths
-        fixed_text = sub(r"\.\./(?:\.\./)?data", "data", script_text)
-        fixed_text = sub(r"(?:plt\.)?show\(\)", r"# \g<0>", fixed_text)
+            # read python file
+            with open(script_file, "r", encoding="utf-8") as f:
+                script_text = f.read()
 
-        # write back to the same file
-        with open(script_file, "w", encoding="utf-8") as f:
-            f.write(fixed_text)
+            # process code to avoid show statements and incorrect file paths
+            fixed_text = sub(r"\.\./(?:\.\./)?data", "data", script_text)
+            fixed_text = sub(r"(?:plt\.)?show\(\)", r"# \g<0>", fixed_text)
 
-        ''' run the script'''
-        
-        # run the script in its directory, capture stdout and stderr in file
-        with open(output_path, "w", encoding="utf-8") as f:
-            start = perf_counter()
-            proc = run(["python", "assessment1.py"], stdout=f, stderr=STDOUT, cwd=script_path)
-            timings['ID'].append(row['Student ID']) 
-            timings['time'].append(perf_counter() - start) 
+            # write back to the same file
+            with open(script_file, "w", encoding="utf-8") as f:
+                f.write(fixed_text)
 
+            ''' run the script'''
+            
+            # run the script in its directory, capture stdout and stderr in file
+            with open(output_path, "w", encoding="utf-8") as f:
+                start = perf_counter()
+                proc = run(["python", "assessment1.py"], stdout=f, stderr=STDOUT, cwd=script_path)
+                timings['ID'].append(row['Student ID']) 
+                timings['time'].append(perf_counter() - start) 
+        else:
+            print(f"Skipping...")
     else:
         unrunnable_repos.append((row['Student ID'], row['Link']))
 
