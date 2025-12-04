@@ -108,13 +108,12 @@ def get_report(url, repo):
             bang = "!"
         else:
             bang = ""
-        print(last_date, commit_date, mins_between, bang)
 
         # cache last time
         last_date = commit_date
 
         # print details for this commit
-        msg += (f"\n {commit_date.strftime('%Y-%m-%d %H:%M:%S')} {commit.hexsha[:7]} {bang:<3} +{added:<4} -{deleted:<4} {f'({added - deleted})':<4} {commit.message.strip()}")
+        msg += (f"\n {commit_date.strftime('%Y-%m-%d %H:%M:%S')} {commit.hexsha[:7]} {bang:<3} +{added:<4} -{deleted:<4} {f'({added - deleted})':<6} {commit.message.strip()}")
 
         # store details for this commit
         commits_info.append({
