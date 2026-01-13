@@ -147,6 +147,7 @@ def git_numstat(url, clone_path=None):
     # if local, just read it directly
     if exists(url):
         repo = Repo(url)
+        return get_report(url, repo)
 
     # otherwise, it is remote
     else:

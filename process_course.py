@@ -7,12 +7,12 @@ from collections import defaultdict
 from os.path import join, exists, isdir
 from pandas import read_excel, read_csv, DataFrame
 
-
 # setup
-output_dir = 'UGIS-2025-A1'
+output_dir = 'UGIS-2025-A2'
 # repos = read_excel('UGIS-2025-A1/dashboard-export-01-21-pm-2025-11-14.xlsx')
-repos = read_csv('UGIS-2025-A1/26_December 1, 2025_09.26.csv')
-run_new_only = True
+# repos = read_csv('UGIS-2025-A1/26_December 1, 2025_09.26.csv')
+repos = read_csv('UGIS-2025-A2/26_January 13, 2026_08.49.csv')
+run_new_only = False
 
 # outut data structures
 inaccessible_repos = []
@@ -28,7 +28,8 @@ for n, row in repos.iterrows():
     ''' get git summary '''
     
     # if they sent a template URL, then report and skip
-    if row['Link'] in ["https://github.com/jonny-huck/ugis-assessment1.git", "https://github.com/gis-123456789/ugis-assessment1.git"]:
+    if row['Link'] in ["https://github.com/jonny-huck/ugis-assessment1.git", "https://github.com/gis-123456789/ugis-assessment1.git", 
+                       "https://github.com/jonny-huck/ugis-assessment2.git", "https://github.com/gis-123456789/ugis-assessment2.git"]:
         invalid_repos.append(row)
         continue
 
@@ -58,7 +59,7 @@ for n, row in repos.iterrows():
     # get file paths
     children = [d for d in listdir(student_dir) if isdir(join(student_dir, d))]
     script_path = join(student_dir, children[0])  # each of these is in a subdirectory of unknown name
-    script_file = join(script_path, "assessment1.py")
+    script_file = join(script_path, "assessment2.py")
     output_path = join(student_dir, "output.txt")
 
     # if the script is in place
@@ -86,7 +87,7 @@ for n, row in repos.iterrows():
             # run the script in its directory, capture stdout and stderr in file
             with open(output_path, "w", encoding="utf-8") as f:
                 start = perf_counter()
-                proc = run(["python", "assessment1.py"], stdout=f, stderr=STDOUT, cwd=script_path)
+                proc = run(["python", "assessment2.py"], stdout=f, stderr=STDOUT, cwd=script_path)
                 timings['ID'].append(row['Student ID']) 
                 timings['time'].append(perf_counter() - start) 
         else:
