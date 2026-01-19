@@ -14,11 +14,11 @@
 import sys
 from git import Repo
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 from statistics import mean, stdev
-from git.exc import GitCommandError
 from os.path import exists, basename
 from tempfile import TemporaryDirectory
+from git.exc import GitCommandError, InvalidGitRepositoryError
 
 
 def count_lines_in_head(repo, extensions=[".py", ".R"]):
@@ -109,11 +109,14 @@ def get_report(url, repo):
         else:
             bang = ""
 
+        # writing speed (if less than an hour between commits)
+        lines_min = added / mins_between if mins_between < 60 else 0
+
         # cache last time
         last_date = commit_date
 
         # print details for this commit
-        msg += (f"\n {commit_date.strftime('%Y-%m-%d %H:%M:%S')} {commit.hexsha[:7]} {bang:<3} +{added:<4} -{deleted:<4} {f'({added - deleted})':<6} {commit.message.strip()}")
+        msg += (f"\n {commit_date.strftime('%Y-%m-%d %H:%M:%S')} {commit.hexsha[:7]} ({lines_min:<4.1f} l/min) {bang:<3} +{added:<4} -{deleted:<4} {f'({added - deleted})':<6} {commit.message.strip()}")
 
         # store details for this commit
         commits_info.append({
@@ -134,7 +137,7 @@ def get_report(url, repo):
         msg += f"\n {'Estimated unedited lines:':<32} {max(n_lines_head - (sum(insertions) - n_lines_head) - 1, 0)}"
         msg += f"\n {'Mean insertions per commit:':<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})"
         largest = max(commits_info, key=lambda c: c['added'] - c['deleted'])
-        msg += f"\n {'Commit with most net insertions:':<32} {largest['date']} +{largest['added']} -{largest['deleted']} {f"({largest['added'] - largest['deleted']})":<4}\n"
+        msg += f"\n {'Commit with most net insertions:':<32} {largest['date']} {commit.hexsha[:7]} +{largest['added']} -{largest['deleted']} {f"({largest['added'] - largest['deleted']})":<4}\n"
     
     # return the text
     return msg
@@ -146,8 +149,12 @@ def git_numstat(url, clone_path=None):
     """
     # if local, just read it directly
     if exists(url):
-        repo = Repo(url)
-        return get_report(url, repo)
+        try:
+            repo = Repo(url)
+            return get_report(url, repo)
+        except InvalidGitRepositoryError:
+            print("ERROR: {url} is not a valid Git Repository.")
+            exit()
 
     # otherwise, it is remote
     else:

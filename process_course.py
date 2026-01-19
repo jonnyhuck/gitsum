@@ -1,3 +1,6 @@
+"""
+Run the GitSummary for each directory in an existing file structure, and run each script
+"""
 from re import sub
 from time import perf_counter
 from gitsum import git_numstat
@@ -12,7 +15,8 @@ output_dir = 'UGIS-2025-A2'
 # repos = read_excel('UGIS-2025-A1/dashboard-export-01-21-pm-2025-11-14.xlsx')
 # repos = read_csv('UGIS-2025-A1/26_December 1, 2025_09.26.csv')
 repos = read_csv('UGIS-2025-A2/26_January 13, 2026_08.49.csv')
-run_new_only = False
+recalc_git = True
+run_new_only = True
 
 # outut data structures
 inaccessible_repos = []
@@ -37,8 +41,8 @@ for n, row in repos.iterrows():
     student_dir = f"{output_dir}/{row['Student ID']}"
     outpath = join(student_dir, "git.txt")
 
-    # only re-calculate git summary if it doesn't already exist
-    if not exists(outpath):
+    # only calculate git summary if it doesn't already exist, or if asked to recalculate
+    if not exists(outpath) or recalc_git:
         
         # ensure it exists
         makedirs(student_dir, exist_ok=True)
