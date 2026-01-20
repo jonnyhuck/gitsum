@@ -56,13 +56,13 @@ def get_report(url, repo):
     * Produce a summary report for a repo object
     """
     # init empty message
-    msg = f"\n{url}\n\nTimeline:"
+    msg = []
 
-    # loop through the commits
+    # loop through the commits in reverse (so oldest to newest)
     commits_info = []
     active_dates = set()
     last_date = datetime.fromtimestamp(0)
-    for commit in repo.iter_commits():
+    for commit in repo.iter_commits("HEAD", reverse=True):
 
         # log commit date
         active_dates.add(datetime.fromtimestamp(commit.committed_date).date())
@@ -98,8 +98,7 @@ def get_report(url, repo):
         commit_date = datetime.fromtimestamp(commit.committed_date)
 
         # add warning flags for short gaps between commits
-        # TODO: these could do with being on the row above really (slight faff as it is the previous one)
-        mins_between = (last_date - commit_date).total_seconds() / 60
+        mins_between = (commit_date - last_date).total_seconds() / 60
         if 0 < mins_between < 2:    # < 2 mins
             bang = "!!!"
         elif 0 < mins_between < 5:  # < 5 mins
@@ -110,37 +109,45 @@ def get_report(url, repo):
             bang = ""
 
         # writing speed (if less than an hour between commits)
-        lines_min = added / mins_between if mins_between < 60 else 0
+        lines_min = added / mins_between if 0 < mins_between < 60 else 0
 
         # cache last time
         last_date = commit_date
 
         # print details for this commit
-        msg += (f"\n {commit_date.strftime('%Y-%m-%d %H:%M:%S')} {commit.hexsha[:7]} ({lines_min:<4.1f} l/min) {bang:<3} +{added:<4} -{deleted:<4} {f'({added - deleted})':<6} {commit.message.strip()}")
+        msg.append(f"\n {commit_date.strftime('%Y-%m-%d %H:%M:%S')} {commit.hexsha[:7]} ({lines_min:<4.1f} l/min) {bang:<3} +{added:<4} -{deleted:<4} {f'({added - deleted})':<6} {commit.message.strip()}")
 
         # store details for this commit
         commits_info.append({
             'commit': commit.hexsha,
             'date': datetime.fromtimestamp(commit.committed_date),
             'added': added,
-            'deleted': deleted
+            'deleted': deleted,
+            'lines_per_min': lines_min
         })
+    
+    # reverse the message (because we constructed it backwards)
+    msg.append(f"\n{url}\n\nTimeline:")
+    msg.reverse()
 
     # create summary statistics text for this repo
     if commits_info:
-        msg += "\n\nSummary:"
-        msg += f"\n {'Total commits:':<32} {len(commits_info)}"
-        msg += f"\n {'Timespan (days):':<32} {(commits_info[0]['date'] - commits_info[-1]['date']).days + 1:,} ({len(active_dates)} active)"
+        msg.append("\n\nSummary:")
+        msg.append(f"\n {'Total commits:':<32} {len(commits_info)}")
+        msg.append(f"\n {'Timespan (days):':<32} {(commits_info[0]['date'] - commits_info[-1]['date']).days + 1:,} ({len(active_dates)} active)")
         n_lines_head = count_lines_in_head(repo)
-        msg += f"\n {'Total lines in HEAD:':<32} {n_lines_head}"
+        msg.append(f"\n {'Total lines in HEAD:':<32} {n_lines_head}")
         insertions = [c['added'] for c in commits_info]
-        msg += f"\n {'Estimated unedited lines:':<32} {max(n_lines_head - (sum(insertions) - n_lines_head) - 1, 0)}"
-        msg += f"\n {'Mean insertions per commit:':<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})"
+        msg.append(f"\n {'Estimated unedited lines:':<32} {max(n_lines_head - (sum(insertions) - n_lines_head) - 1, 0)}")
+        speeds = [c['lines_per_min'] for c in commits_info]
+        msg.append(f"\n {'Mean lines per minute:':<32} {mean(speeds):.2f} (std: {stdev(speeds) if len(speeds) > 1 else 0:.2f})")
+        msg.append(f"\n {'Max lines per minute:':<32} {max(speeds):.2f}")
+        msg.append(f"\n {'Mean insertions per commit:':<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})")
         largest = max(commits_info, key=lambda c: c['added'] - c['deleted'])
-        msg += f"\n {'Commit with most net insertions:':<32} {largest['date']} {commit.hexsha[:7]} +{largest['added']} -{largest['deleted']} {f"({largest['added'] - largest['deleted']})":<4}\n"
+        msg.append(f"\n {'Commit with most net insertions:':<32} {largest['date']} {commit.hexsha[:7]} +{largest['added']} -{largest['deleted']} {f"({largest['added'] - largest['deleted']})":<4}\n")
     
     # return the text
-    return msg
+    return "".join(msg)
 
 
 def git_numstat(url, clone_path=None):
