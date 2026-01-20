@@ -134,7 +134,7 @@ def get_report(url, repo):
     if commits_info:
         msg.append("\n\nSummary:")
         msg.append(f"\n {'Total commits:':<32} {len(commits_info)}")
-        msg.append(f"\n {'Timespan (days):':<32} {(commits_info[0]['date'] - commits_info[-1]['date']).days + 1:,} ({len(active_dates)} active)")
+        msg.append(f"\n {'Timespan (days):':<32} {(commits_info[-1]['date'] - commits_info[0]['date']).days + 1:,} ({len(active_dates)} active)")
         n_lines_head = count_lines_in_head(repo)
         msg.append(f"\n {'Total lines in HEAD:':<32} {n_lines_head}")
         insertions = [c['added'] for c in commits_info]
