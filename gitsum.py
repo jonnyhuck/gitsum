@@ -144,7 +144,7 @@ def get_report(url, repo):
         msg.append(f"\n {'Max lines per minute:':<32} {max(speeds):.2f}")
         msg.append(f"\n {'Mean insertions per commit:':<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})")
         largest = max(commits_info, key=lambda c: c['added'] - c['deleted'])
-        msg.append(f"\n {'Commit with most net insertions:':<32} {largest['date']} {commit.hexsha[:7]} +{largest['added']} -{largest['deleted']} {f"({largest['added'] - largest['deleted']})":<4}\n")
+        msg.append(f"\n {'Commit with most net insertions:':<32} {largest['date']} {largest.hexsha[:7]} +{largest['added']} -{largest['deleted']} {f"({largest['added'] - largest['deleted']})":<4}\n")
     
     # return the text
     return "".join(msg)
