@@ -17,7 +17,7 @@ from pandas import read_csv, DataFrame
 output_dir = 'UGIS-2025-A2'     # directory in which to clone the repositories
 input_csv = 'UGIS-2025-A2/26_January 26, 2026_06.55.csv'    # csv of student IDs and repo links
 student_column = 'Student ID'   # column in the CSV containing the student ID
-repo_column = 'URL'             # column in the repo containing the remote repository reference
+repo_column = 'Link'             # column in the repo containing the remote repository reference
 script_name = "assessment2.py"  # name of the script to run
 recalc_git = True               # recalculate git summaries, even where they exist
 run_new_only = True             # only run scripts in repos that are new

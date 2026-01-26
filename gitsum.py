@@ -200,7 +200,7 @@ def git_numstat(url, clone_path=None):
                     
                     # ...then it to get a report on the local repo instead
                     if path:
-                        print(f"Directory exists, producing report on existing directory ({path}) instead of clone.")
+                        print(f"Directory exists, producing report on existing directory ({path}).")
                         repo = Repo(path)
                         return get_report(url, repo)
                     
