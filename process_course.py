@@ -1,5 +1,8 @@
 """
 Run the GitSummary for each directory in an existing file structure, and run each script
+
+    Git report is written to repo/git.txt and the output of the script is written to repo/out.txt
+    All script runtimes are stored in timings.csv
 """
 from re import sub
 from time import perf_counter
@@ -8,37 +11,46 @@ from os import makedirs, listdir
 from subprocess import run, STDOUT
 from collections import defaultdict
 from os.path import join, exists, isdir
-from pandas import read_excel, read_csv, DataFrame
+from pandas import read_csv, DataFrame
 
 # setup
-output_dir = 'UGIS-2025-A2'
-# repos = read_excel('UGIS-2025-A1/dashboard-export-01-21-pm-2025-11-14.xlsx')
-# repos = read_csv('UGIS-2025-A1/26_December 1, 2025_09.26.csv')
-repos = read_csv('UGIS-2025-A2/26_January 13, 2026_08.49.csv')
-recalc_git = True
-run_new_only = True
+output_dir = 'UGIS-2025-A2'     # directory in which to clone the repositories
+input_csv = 'UGIS-2025-A2/26_January 26, 2026_06.55.csv'    # csv of student IDs and repo links
+student_column = 'Student ID'   # column in the CSV containing the student ID
+repo_column = 'URL'             # column in the repo containing the remote repository reference
+script_name = "assessment2.py"  # name of the script to run
+recalc_git = True               # recalculate git summaries, even where they exist
+run_new_only = True             # only run scripts in repos that are new
+invalid_users = ['jonny-huck', 'gis-123456789']  # invalid users
 
-# outut data structures
+# output data structures
 inaccessible_repos = []
 unrunnable_repos = []
 invalid_repos = []
 timings = defaultdict(list)
 
+# read in csv
+repos = read_csv(input_csv)
+
 # for each repo
 N = len(repos.index)
 for n, row in repos.iterrows():
-    print(f"processing {row['Student ID']} ({n}/{N})")
+    print(f"processing {row[student_column]} ({n}/{N})")
 
     ''' get git summary '''
     
     # if they sent a template URL, then report and skip
-    if row['Link'] in ["https://github.com/jonny-huck/ugis-assessment1.git", "https://github.com/gis-123456789/ugis-assessment1.git", 
-                       "https://github.com/jonny-huck/ugis-assessment2.git", "https://github.com/gis-123456789/ugis-assessment2.git"]:
-        invalid_repos.append(row)
+    cont = False
+    for invalid_user in invalid_users:
+        if invalid_user in row[repo_column]:
+            invalid_repos.append(row)
+            cont = True
+            break
+    if cont:
         continue
 
     # get repo path
-    student_dir = f"{output_dir}/{row['Student ID']}"
+    student_dir = f"{output_dir}/{row[student_column]}"
     outpath = join(student_dir, "git.txt")
 
     # only calculate git summary if it doesn't already exist, or if asked to recalculate
@@ -48,11 +60,11 @@ for n, row in repos.iterrows():
         makedirs(student_dir, exist_ok=True)
 
         # get the git summary
-        try:
-            msg = git_numstat(row['Link'], student_dir)
-        except:
-            inaccessible_repos.append((row['Student ID'], row['Link']))
-            continue
+        # try:
+        msg = git_numstat(row[repo_column], student_dir)
+        # except:
+        #     inaccessible_repos.append((row['Student ID'], row['Link']))
+        #     continue
 
         # write msg to student_dir/git.txt
         with open(outpath, "w", encoding="utf-8") as f:
@@ -63,7 +75,7 @@ for n, row in repos.iterrows():
     # get file paths
     children = [d for d in listdir(student_dir) if isdir(join(student_dir, d))]
     script_path = join(student_dir, children[0])  # each of these is in a subdirectory of unknown name
-    script_file = join(script_path, "assessment2.py")
+    script_file = join(script_path, script_name)
     output_path = join(student_dir, "output.txt")
 
     # if the script is in place
@@ -91,7 +103,7 @@ for n, row in repos.iterrows():
             # run the script in its directory, capture stdout and stderr in file
             with open(output_path, "w", encoding="utf-8") as f:
                 start = perf_counter()
-                proc = run(["python", "assessment2.py"], stdout=f, stderr=STDOUT, cwd=script_path)
+                proc = run(["python", script_name], stdout=f, stderr=STDOUT, cwd=script_path)
                 timings['ID'].append(row['Student ID']) 
                 timings['time'].append(perf_counter() - start) 
         else:
@@ -107,7 +119,7 @@ if len(inaccessible_repos) > 0:
 
 # report any URLs that I could not run
 if len(unrunnable_repos) > 0:
-    print(f'\nCould not run assessment1.py in the following repos:')
+    print(f'\nCould not run {script_name} in the following repos:')
     for id, url in unrunnable_repos:
         print(f"- {id} ({url})")
 

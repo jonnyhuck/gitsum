@@ -5,14 +5,14 @@
 * Local or remote repos can be analysed, local repos will be read directly, whereas remotes 
 *   will be cloned into a temporary directory for analysis.
 *
-* Remote URLs can be in the form https://... or git@..., - the latter will be required 
-*   if you want to make use of SSH keys (instead of typing in credentials).
+* Remote URLs can be in the form https://... or git@...
 *
 * @author jonnyhuck
 """
 
 import sys
 from git import Repo
+from re import search
 from pathlib import Path
 from datetime import datetime
 from statistics import mean, stdev
@@ -51,7 +51,7 @@ def count_lines_in_head(repo, extensions=[".py", ".R"]):
     return total
 
 
-def get_report(url, repo):
+def get_report(url, repo, interval=60):
     """
     * Produce a summary report for a repo object
     """
@@ -59,6 +59,7 @@ def get_report(url, repo):
     msg = []
 
     # loop through the commits in reverse (so oldest to newest)
+    total_time = 0
     commits_info = []
     active_dates = set()
     last_date = datetime.fromtimestamp(0)
@@ -108,8 +109,12 @@ def get_report(url, repo):
         else:
             bang = ""
 
-        # writing speed (if less than an hour between commits)
-        lines_min = added / mins_between if 0 < mins_between < 60 else 0
+        # writing speed (if less than specified interval between commits)
+        if 0 < mins_between < interval:
+            total_time += mins_between
+            lines_min = added / mins_between  
+        else: 
+            lines_min = 0
 
         # cache last time
         last_date = commit_date
@@ -127,27 +132,31 @@ def get_report(url, repo):
         })
     
     # reverse the message (because we constructed it backwards)
-    msg.append(f"\n{url}\n\nTimeline:")
+    msg.append(f"\n\nTimeline:")
     msg.reverse()
 
     # create summary statistics text for this repo
+    msg_summary = []
     if commits_info:
-        msg.append("\n\nSummary:")
-        msg.append(f"\n {'Total commits:':<32} {len(commits_info)}")
-        msg.append(f"\n {'Timespan (days):':<32} {(commits_info[-1]['date'] - commits_info[0]['date']).days + 1:,} ({len(active_dates)} active)")
+        msg_summary.append("\nGit Summary:")
+        msg_summary.append(f"\n {'Repo:':<32} {url}")
+        msg_summary.append(f"\n {'Total commits:':<32} {len(commits_info)}")
+        msg_summary.append(f"\n {'Timespan (days):':<32} {(commits_info[-2]['date'] - commits_info[0]['date']).days + 1:,} ({len(active_dates)} active)")
+        hours, mins = divmod(total_time, 60)
+        msg_summary.append(f"\n {'Estimated work time (H:M):':<32} {int(hours)}:{int(mins):0>2}")
         n_lines_head = count_lines_in_head(repo)
-        msg.append(f"\n {'Total lines in HEAD:':<32} {n_lines_head}")
+        msg_summary.append(f"\n {'Total lines in HEAD:':<32} {n_lines_head}")
         insertions = [c['added'] for c in commits_info]
-        msg.append(f"\n {'Estimated unedited lines:':<32} {max(n_lines_head - (sum(insertions) - n_lines_head) - 1, 0)}")
+        msg_summary.append(f"\n {'Estimated unedited lines:':<32} {max(n_lines_head - (sum(insertions) - n_lines_head) - 1, 0)}")
         speeds = [c['lines_per_min'] for c in commits_info]
-        msg.append(f"\n {'Mean lines per minute:':<32} {mean(speeds):.2f} (std: {stdev(speeds) if len(speeds) > 1 else 0:.2f})")
-        msg.append(f"\n {'Max lines per minute:':<32} {max(speeds):.2f}")
-        msg.append(f"\n {'Mean insertions per commit:':<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})")
+        msg_summary.append(f"\n {'Mean lines per minute:':<32} {mean(speeds):.2f} (std: {stdev(speeds) if len(speeds) > 1 else 0:.2f})")
+        msg_summary.append(f"\n {'Max lines per minute:':<32} {max(speeds):.2f}")
+        msg_summary.append(f"\n {'Mean insertions per commit:':<32} {mean(insertions):.2f} (std: {stdev(insertions) if len(insertions) > 1 else 0:.2f})")
         largest = max(commits_info, key=lambda c: c['added'] - c['deleted'])
-        msg.append(f"\n {'Commit with most net insertions:':<32} {largest['date']} {largest.hexsha[:7]} +{largest['added']} -{largest['deleted']} {f"({largest['added'] - largest['deleted']})":<4}\n")
+        msg_summary.append(f"\n {'Commit with most net insertions:':<32} {largest['date']} {largest['commit'][:7]} +{largest['added']} -{largest['deleted']} {f"({largest['added'] - largest['deleted']})":<4}\n")
     
     # return the text
-    return "".join(msg)
+    return "".join(msg_summary + msg)
 
 
 def git_numstat(url, clone_path=None):
@@ -180,9 +189,31 @@ def git_numstat(url, clone_path=None):
             # clone the repo into the desired directory
             try:
                 repo = Repo.clone_from(url, clone_dir, depth=None)
-            except GitCommandError:
-                print(f"\nERROR: could not fetch remote {url} \nEither it doesn't exist, or you don't have permission.\n")
-                exit()
+            except GitCommandError as e:
+
+                # if the repo is already cloned, then do the report from that instead
+                if "already exists and is not an empty directory" in e.stderr:
+                    
+                    # extract the destinatio path from the error message...
+                    match = search(r"destination path '(.+?)'", e.stderr)
+                    path = match.group(1) if match else None
+                    
+                    # ...then it to get a report on the local repo instead
+                    if path:
+                        print(f"Directory exists, producing report on existing directory ({path}) instead of clone.")
+                        repo = Repo(path)
+                        return get_report(url, repo)
+                    
+                    # if, for any reason we can't retrieve the path, exit
+                    else:
+                        print("Cannot retrieve path")
+                        exit()
+
+                # for other errors, just report and exit
+                else:
+                    print("Clone failed due to a git error:")
+                    print(e.stderr)
+                    exit()
             
             # get the summary text and return
             return get_report(url, repo)
