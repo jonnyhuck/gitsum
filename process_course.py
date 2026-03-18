@@ -15,11 +15,11 @@ from pandas import read_csv, DataFrame
 
 # setup
 output_dir = 'UGIS-2025-A2'     # directory in which to clone the repositories
-input_csv = 'UGIS-2025-A2/26_January 26, 2026_06.55.csv'    # csv of student IDs and repo links
+input_csv = 'UGIS-2025-A2/26_February 13, 2026_03.18.csv'    # csv of student IDs and repo links
 student_column = 'Student ID'   # column in the CSV containing the student ID
-repo_column = 'Link'             # column in the repo containing the remote repository reference
+repo_column = 'Link'            # column in the repo containing the remote repository reference
 script_name = "assessment2.py"  # name of the script to run
-recalc_git = True               # recalculate git summaries, even where they exist
+recalc_git = False              # recalculate git summaries, even where they exist
 run_new_only = True             # only run scripts in repos that are new
 invalid_users = ['jonny-huck', 'gis-123456789']  # invalid users
 
@@ -60,11 +60,11 @@ for n, row in repos.iterrows():
         makedirs(student_dir, exist_ok=True)
 
         # get the git summary
-        # try:
-        msg = git_numstat(row[repo_column], student_dir)
-        # except:
-        #     inaccessible_repos.append((row['Student ID'], row['Link']))
-        #     continue
+        try:
+            msg = git_numstat(row[repo_column], student_dir)
+        except:
+            inaccessible_repos.append((row['Student ID'], row['Link']))
+            continue
 
         # write msg to student_dir/git.txt
         with open(outpath, "w", encoding="utf-8") as f:

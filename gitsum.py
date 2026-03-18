@@ -59,7 +59,8 @@ def get_report(url, repo, interval=60):
     msg = []
 
     # loop through the commits in reverse (so oldest to newest)
-    total_time = 0
+    total_times = []
+    missing_times = 0
     commits_info = []
     active_dates = set()
     last_date = datetime.fromtimestamp(0)
@@ -111,9 +112,10 @@ def get_report(url, repo, interval=60):
 
         # writing speed (if less than specified interval between commits)
         if 0 < mins_between < interval:
-            total_time += mins_between
+            total_times.append(mins_between)
             lines_min = added / mins_between  
         else: 
+            missing_times += 1
             lines_min = 0
 
         # cache last time
@@ -142,7 +144,7 @@ def get_report(url, repo, interval=60):
         msg_summary.append(f"\n {'Repo:':<32} {url}")
         msg_summary.append(f"\n {'Total commits:':<32} {len(commits_info)}")
         msg_summary.append(f"\n {'Timespan (days):':<32} {(commits_info[-2]['date'] - commits_info[0]['date']).days + 1:,} ({len(active_dates)} active)")
-        hours, mins = divmod(total_time, 60)
+        hours, mins = divmod(sum(total_times) + mean(total_times) * missing_times, 60)
         msg_summary.append(f"\n {'Estimated work time (H:M):':<32} {int(hours)}:{int(mins):0>2}")
         n_lines_head = count_lines_in_head(repo)
         msg_summary.append(f"\n {'Total lines in HEAD:':<32} {n_lines_head}")

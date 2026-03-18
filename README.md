@@ -12,29 +12,30 @@ Call the script directly simply by passing the path or url of a Git repository a
 If you just want to test it, running `python gitsum.py` with no argument will run the analysis for this repository.
 
 #### Call as a Library
-See `process_course.py` for an example where you read Student IDs and Git URLs from a spreadsheet. Each repo is cloned, and files are added for the GitSum output and the output of running the `assessment1.py` file.
+See `process_course.py` for an example where you read Student IDs and Git URLs from a spreadsheet. Each repo is cloned, and files are added for the GitSum output and the output of running the script.
 
 ### Example Output
-The script ereturns a list of all of the commits in the form (date, inserted lines, removed lines, message). It then provides a summary of the commits, including the number, timespan, mean insertions per commmit and the commit with the greatest net insertions:
+The script provides a summary of the commits, including the number, timespan, speed, mean insertions per commmit and the commit with the greatest net insertions. This section includes an estimate of the amount of time spent on the project, which is calculated as the sum of the amount of time between commits that took place within 1 hour of each other, plus the mean of those times multiplied by the number of times the gap between commits was greater than an hour. This is then followed by a detailed timeline of commmits:
 
 ```txt
 No URL provided - defaulting to https://github.com/jonnyhuck/gitsum
-created tmp directory: /var/folders/9_/7s25zcsn2jjc8gr0k6k6fqnw0000gn/T/tmpuczmceth
+created tmp directory: /var/folders/9_/7s25zcsn2jjc8gr0k6k6fqnw0000gn/T/tmpi9mhk319
 
 Git Summary:
  Repo:                            https://github.com/jonnyhuck/gitsum
- Total commits:                   32
- Timespan (days):                 175 (14 active)
- Estimated work time (H:M):       1:43
+ Total commits:                   33
+ Timespan (days):                 179 (14 active)
+ Estimated work time (H:M):       4:36
  Total lines in HEAD:             390
  Estimated unedited lines:        0
- Mean lines per minute:           2.25 (std: 7.67)
+ Mean lines per minute:           2.46 (std: 7.65)
  Max lines per minute:            42.35
- Mean insertions per commit:      36.44 (std: 49.55)
+ Mean insertions per commit:      36.88 (std: 48.83)
  Commit with most net insertions: 2025-08-01 14:09:00 b440520 +168 -0 (168)
 
 
 Timeline:
+ 2026-01-26 16:37:49 0760325 (9.1  l/min) !   +51   -36   (15)   update readme
  2026-01-26 16:32:12 3cc14b5 (0.0  l/min)     +86   -69   (17)   added more info on timing, move summary info to top, make precess_course able to re-run existing repos
  2026-01-23 10:23:15 da392b0 (0.0  l/min)     +1    -1    (0)    fixed bug in misreported largest sha
  2026-01-20 14:15:20 81322e1 (0.3  l/min) !!  +1    -1    (0)    fix bug in timespan
@@ -70,9 +71,11 @@ Timeline:
 ```
 
 The timeline is formatted as: 
+
 `<datatime> <sha> (<coding speed>) <flags> +<inserts> -<deletions> (<net change>) <message>`
+
 `!!!` flags commits within 2 mins of the previous, `!!` within 5 mins, and `!` within 10 mins.
 
 ### Dependencies
 This script relies on the excellent [`GitPython`](https://github.com/gitpython-developers/GitPython) library.
-The `process_course.py` example also uses [`pandas`](https://pandas.pydata.org/) and [`openpyxl`](https://openpyxl.readthedocs.io/en/stable/).
+The `process_course.py` example implementation also uses [`pandas`](https://pandas.pydata.org/).
